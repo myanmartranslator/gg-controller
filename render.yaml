@@ -1,0 +1,16 @@
+services:
+  - type: web
+    name: golden-goal-live
+    runtime: python
+    plan: free            # use "starter" to avoid sleeping after 15 min idle
+    buildCommand: "echo no build step"
+    startCommand: "python server.py"
+    healthCheckPath: /healthz
+    numInstances: 1       # state is kept in memory - must stay at 1 instance
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.12.7"
+      - key: PYTHONUNBUFFERED
+        value: "1"
+      - key: GG_PIN
+        sync: false       # Render will ask you to enter a PIN on first deploy

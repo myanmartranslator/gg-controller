@@ -1,0 +1,46 @@
+GOLDEN GOAL LIVE CONTROLLER
+===========================
+
+1) START (every stream)
+   Mac:     double-click "Start Golden Goal (Mac).command"
+            (first time: right-click > Open > Open. If asked to install
+             "command line developer tools", click Install, then try again.
+             If macOS asks to allow incoming connections, click Allow.)
+   Windows: double-click "Start Golden Goal (Windows).bat"
+            (needs Python from python.org - tick "Add to PATH" when installing)
+
+   A window opens showing:
+     PHONE (same Wi-Fi):  http://192.168.x.x:8080
+     PIN:                 1234
+     OBS browser source:  http://localhost:8080/overlay
+   Keep this window open while you stream.
+
+2) OBS (one time)
+   + > Browser > UNTICK "Local file"
+   URL:    http://localhost:8080/overlay
+   Width:  2560    Height: 1182   (your canvas size)
+   Put it ABOVE your camera. In other scenes use "Add Existing".
+
+3) PHONE
+   Connect the phone to the SAME Wi-Fi as the computer.
+   Open the PHONE address in Safari/Chrome, type the PIN.
+   Tip: Share > "Add to Home Screen" to open it like an app.
+
+4) MG MAHAR ARTWORK (optional) - put in this folder, then refresh the OBS source:
+   sponsor.png     logo for the "Sponsored by" strip
+   sponsor-ad.png  full advert for the right card (about 430 x 580, portrait)
+
+5) Fixed PIN (optional): the PIN changes every start. To keep one, Mac:
+   open Terminal in this folder and run:  GG_PIN=2580 python3 server.py
+
+6) DEPLOY ON RENDER (online - no same-Wi-Fi needed)
+   a) Put this folder in a GitHub repo (sponsor.png / sponsor-ad.png too, if used).
+   b) render.com > New > Blueprint > pick the repo (it reads render.yaml).
+      When asked, enter GG_PIN (your fixed PIN, e.g. 2580).
+   c) After deploy you get https://<name>.onrender.com
+        PHONE:  https://<name>.onrender.com        (any network, type the PIN)
+        OBS:    https://<name>.onrender.com/overlay
+   Notes:
+   - Keep 1 instance only (state lives in memory).
+   - Free plan sleeps after ~15 min without traffic and loses the score on
+     restart. Open the OBS overlay before going live, or use the Starter plan.
