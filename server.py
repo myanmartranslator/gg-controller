@@ -7,7 +7,8 @@ OBS browser source: http://localhost:8080/overlay
 """
 import json, os, random, socket, threading, time
 from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
-from urllib.parse import urlparse
+from urllib.parse import urlparse, parse_qs
+import urllib.request
 
 PORT = int(os.environ.get("PORT") or os.environ.get("GG_PORT") or "8080")  # Render sets PORT
 ON_RENDER = bool(os.environ.get("RENDER"))
@@ -32,6 +33,56 @@ def lan_ip():
         return "127.0.0.1"
     finally:
         s.close()
+
+
+# ---------- live league table (ESPN public standings feed, no key needed) ----------
+LEAGUES = {"eng.1": "Premier League", "esp.1": "LaLiga", "ita.1": "Serie A", "ger.1": "Bundesliga",
+           "fra.1": "Ligue 1", "eng.2": "Championship", "uefa.champions": "Champions League"}
+SHORT = {"Manchester City": "Man City", "Manchester United": "Man United", "Brighton & Hove Albion": "Brighton",
+         "AFC Bournemouth": "Bournemouth", "Tottenham Hotspur": "Tottenham", "Newcastle United": "Newcastle",
+         "Nottingham Forest": "Nott'm Forest", "Leeds United": "Leeds", "Wolverhampton Wanderers": "Wolves",
+         "West Ham United": "West Ham", "Ipswich Town": "Ipswich", "Coventry City": "Coventry", "Hull City": "Hull",
+         "Leicester City": "Leicester", "Sheffield United": "Sheffield Utd", "Norwich City": "Norwich",
+         "Atletico Madrid": "Atlético", "Paris Saint-Germain": "PSG", "Bayern Munich": "Bayern",
+         "Borussia Dortmund": "Dortmund", "Bayer Leverkusen": "Leverkusen", "Internazionale": "Inter"}
+TABLE_URL = os.environ.get("GG_TABLE_URL", "https://site.api.espn.com/apis/v2/sports/soccer/{lg}/standings")
+_tcache = {}
+
+
+def parse_standings(data):
+    groups = data.get("children") or [data]
+    entries = []
+    for g in groups:
+        entries += (g.get("standings") or {}).get("entries") or []
+    rows = []
+    for e in entries:
+        st = {x.get("name"): x.get("value") for x in e.get("stats", []) if "value" in x}
+        t = e.get("team") or {}
+        full = t.get("displayName") or t.get("shortDisplayName") or t.get("name") or "?"
+        n = lambda k: int(round(float(st.get(k) or 0)))
+        rows.append({"team": SHORT.get(full, t.get("shortDisplayName") if len(full) > 14 and t.get("shortDisplayName") else full),
+                     "p": n("gamesPlayed"), "w": n("wins"), "d": n("ties"), "l": n("losses"),
+                     "gd": n("pointDifferential"), "pts": n("points"), "_r": st.get("rank") or 99})
+    rows.sort(key=lambda r: (r["_r"] or 99, -r["pts"], -r["gd"]))
+    for r in rows:
+        r.pop("_r", None)
+    return rows
+
+
+def live_table(lg):
+    if lg not in LEAGUES:
+        lg = "eng.1"
+    c = _tcache.get(lg)
+    if c and time.time() - c[0] < 60:
+        return c[1]
+    req = urllib.request.Request(TABLE_URL.format(lg=lg), headers={"User-Agent": "Mozilla/5.0 GoldenGoal"})
+    with urllib.request.urlopen(req, timeout=12) as r:
+        rows = parse_standings(json.loads(r.read().decode("utf-8")))
+    if not rows:
+        raise ValueError("feed returned no teams")
+    out = {"ok": True, "league": LEAGUES[lg], "rows": rows, "at": int(time.time())}
+    _tcache[lg] = (time.time(), out)
+    return out
 
 
 class H(BaseHTTPRequestHandler):
@@ -69,6 +120,13 @@ class H(BaseHTTPRequestHandler):
             return self.file("overlay.html")
         if path == "/state":
             return self.send(200, state["json"].encode(), "application/json")
+        if path == "/api/table":
+            lg = (parse_qs(urlparse(self.path).query).get("league") or ["eng.1"])[0]
+            try:
+                out = live_table(lg)
+            except Exception as e:
+                out = {"ok": False, "error": str(e)[:200]}
+            return self.send(200, json.dumps(out).encode(), "application/json")
         if path == "/healthz":
             return self.send(200, b"ok")
         if path == "/check":
