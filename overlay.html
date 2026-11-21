@@ -339,7 +339,7 @@ function handle(text){
   else if(u.includes('▶')||u==='START'){if(!S.running){S.running=true;S.t0=Date.now()}reply='Clock running'}
   else if(u.includes('⏸')||u==='PAUSE'){if(S.running){S.base=secs();S.running=false}reply='Clock paused at '+mmss(S.base)}
   else if(u.includes('UNDO')){hist.pop();const p=hist.pop();if(p){S=JSON.parse(p)}if(S.pin)showCard(S.pin);buildTicker();reply='Undone – score '+S.h+'-'+S.a}
-  else if(u==='1ST'){S.per='1ST';S.base=0;S.running=false;S.add='';reply='1st half – clock at 00:00, press START at kick-off'}
+  else if(u==='1ST'){S.per='1ST';S.base=0;S.running=false;S.add='';reply='Clock reset to 00:00 (1st half) – press START at kick-off'}
   else if(u==='HT'){S.base=secs();S.running=false;S.per='HT';S.add='';reply='Half-time'}
   else if(u==='2ND'){S.per='2ND';S.base=2700;S.running=false;S.add='';reply='2nd half – clock at 45:00, press START at kick-off'}
   else if(u==='FT'){S.base=secs();S.running=false;S.per='FT';S.add='';reply='Full-time '+S.h+'-'+S.a}

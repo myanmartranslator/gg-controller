@@ -88,7 +88,8 @@ details.sub summary{font-weight:700;cursor:pointer}
   <div class="hint" style="margin:0 0 6px">Type the time you see on the TV broadcast, e.g. <b>23:15</b> or just <b>23</b>, then tap SET.</div>
   <div class="row"><input id="tmMain" inputmode="decimal" placeholder="23:15"><button class="gold" id="tmMainGo" style="flex:0 0 110px">SET</button></div>
   <div class="g g4" style="margin-top:8px"><button class="sm" data-c="/nudge -60">−1 MIN</button><button class="sm" data-c="/nudge -10">−10 SEC</button><button class="sm" data-c="/nudge 10">+10 SEC</button><button class="sm" data-c="/nudge 60">+1 MIN</button></div>
-  <button class="sm" id="clkReset" style="margin-top:8px;width:100%">⟲ RESET CLOCK TO 00:00</button>
+  <div class="g g3" style="margin-top:8px"><button class="red" id="clkReset">⟲ 00:00</button><button class="gold" data-c="/time 45:00">45:00</button><button class="gold" data-c="/time 90:00">90:00</button></div>
+  <div class="hint" style="margin:6px 0 0">⟲ 00:00 = reset (1st half, clock stopped, added time off – score stays). 45:00 / 90:00 jump the clock and keep it running if it was running.</div>
 </div>
 <h2>ADDED TIME</h2>
 <div class="g g5"><button class="sm add" data-c="/add">OFF</button><button class="sm add" data-c="/add 1">+1</button><button class="sm add" data-c="/add 2">+2</button><button class="sm add" data-c="/add 3">+3</button><button class="sm add" data-c="/add 4">+4</button></div>
@@ -205,7 +206,7 @@ function clockArg(v){v=String(v||'').trim().replace(/[.,;' ]/g,':').replace(/[^\
   const m=parseInt(mm,10);if(isNaN(m)||m>150)return '';const s=Math.min(59,parseInt(ss||'0',10)||0);return m+':'+String(s).padStart(2,'0')}
 $('tmMainGo').onclick=()=>{const a=clockArg($('tmMain').value);if(!a)return toast('Type the TV time, e.g. 23:15 or 23');send('/time '+a);$('tmMain').value='';$('tmMain').blur()};
 $('tmMain').onkeydown=e=>{if(e.key==='Enter')$('tmMainGo').click()};
-let ckArm=0;$('clkReset').onclick=()=>{if(Date.now()-ckArm<3000){send('/clockreset');ckArm=0;$('clkReset').textContent='⟲ RESET CLOCK TO 00:00'}else{ckArm=Date.now();$('clkReset').textContent='TAP AGAIN TO RESET CLOCK';setTimeout(()=>{$('clkReset').textContent='⟲ RESET CLOCK TO 00:00'},3000)}};
+$('clkReset').onclick=()=>send('1ST');
 $('addGo').onclick=()=>{const n=parseInt($('addC').value,10);if(!(n>=1&&n<=30))return toast('Type added minutes, 1 to 30');send('/add '+n);$('addC').value='';$('addC').blur()};
 $('addC').onkeydown=e=>{if(e.key==='Enter')$('addGo').click()};
 $('tkGo').onclick=()=>{const l=$('tk').value.split('\n').map(x=>x.trim()).filter(Boolean);if(l.length)send('/ticker '+l.join(' | '))};
