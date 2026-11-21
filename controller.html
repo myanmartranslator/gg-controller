@@ -19,7 +19,9 @@ body{background:#05052E;color:#fff;font-family:B,system-ui,sans-serif;font-weigh
 .board .c{padding:0 14px}.board .c b{display:block;font-size:12px;letter-spacing:3px;color:var(--gold)}.board .c span{font-family:BC;font-weight:800;font-size:30px}
 .board .c em{font-style:normal;color:#FF7A7A;font-size:16px}
 h2{font-size:11px;letter-spacing:4px;color:var(--gold);margin:16px 2px 8px}
-.g{display:grid;gap:8px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g6{grid-template-columns:repeat(6,1fr)}
+.g{display:grid;gap:8px}.g2{grid-template-columns:1fr 1fr}.g3{grid-template-columns:repeat(3,1fr)}.g4{grid-template-columns:repeat(4,1fr)}.g6{grid-template-columns:repeat(6,1fr)}.g5{grid-template-columns:repeat(5,1fr)}
+.clk{background:#0A0A48;border:1.5px solid #2C2C8C;border-radius:12px;padding:10px}
+button.add.on{background:var(--gold);color:var(--navy);border-color:var(--gold)}
 button{font-family:BC;font-weight:800;font-size:19px;letter-spacing:.5px;color:#fff;background:var(--n2);border:1.5px solid #2C2C8C;border-radius:12px;padding:14px 6px;cursor:pointer;touch-action:manipulation}
 button:active{transform:scale(.96)}
 button.gold{background:var(--gold);color:var(--navy);border-color:var(--gold)}
@@ -81,8 +83,16 @@ details.sub summary{font-weight:700;cursor:pointer}
 <h2>MATCH CLOCK</h2>
 <div class="g g3"><button class="big" data-c="▶️ START">▶ START</button><button class="big" data-c="⏸ PAUSE">⏸ PAUSE</button><button class="big" data-c="↩️ UNDO">↩ UNDO</button></div>
 <div class="g g4" style="margin-top:8px"><button data-c="1ST" class="per">1ST</button><button data-c="HT" class="per">HT</button><button data-c="2ND" class="per">2ND</button><button data-c="FT" class="per">FT</button></div>
+<h2>SET TIME – MATCH THE TV</h2>
+<div class="clk">
+  <div class="hint" style="margin:0 0 6px">Type the time you see on the TV broadcast, e.g. <b>23:15</b> or just <b>23</b>, then tap SET.</div>
+  <div class="row"><input id="tmMain" inputmode="decimal" placeholder="23:15"><button class="gold" id="tmMainGo" style="flex:0 0 110px">SET</button></div>
+  <div class="g g4" style="margin-top:8px"><button class="sm" data-c="/nudge -60">−1 MIN</button><button class="sm" data-c="/nudge -10">−10 SEC</button><button class="sm" data-c="/nudge 10">+10 SEC</button><button class="sm" data-c="/nudge 60">+1 MIN</button></div>
+  <button class="sm" id="clkReset" style="margin-top:8px;width:100%">⟲ RESET CLOCK TO 00:00</button>
+</div>
 <h2>ADDED TIME</h2>
-<div class="g g6"><button class="sm" data-c="/add">OFF</button><button class="sm" data-c="/add 1">+1</button><button class="sm" data-c="/add 2">+2</button><button class="sm" data-c="/add 3">+3</button><button class="sm" data-c="/add 4">+4</button><button class="sm" data-c="/add 5">+5</button></div>
+<div class="g g5"><button class="sm add" data-c="/add">OFF</button><button class="sm add" data-c="/add 1">+1</button><button class="sm add" data-c="/add 2">+2</button><button class="sm add" data-c="/add 3">+3</button><button class="sm add" data-c="/add 4">+4</button></div>
+<div class="row" style="margin-top:8px"><input id="addC" inputmode="numeric" placeholder="Custom minutes e.g. 6"><button class="gold" id="addGo" style="flex:0 0 110px">SET +</button></div>
 
 <h2>RIGHT-SIDE CARD</h2>
 <div class="g g3"><button data-c="👥 BOTH XI" class="card" data-p="xiB">LINE-UPS</button><button data-c="🏆 TABLE" class="card" data-p="table">TABLE</button><button data-c="💰 SPONSOR" class="card" data-p="sponsor">MG MAHAR</button>
@@ -186,9 +196,18 @@ $('lgGo').onclick=()=>$('lg').value&&send('/league '+$('lg').value);
 $('hlGo').onclick=()=>$('hl').value&&send('/headline '+$('hl').value);
 $('sbGo').onclick=()=>$('sb').value&&send('/subs '+$('sb').value);
 $('scGo').onclick=()=>send(`/score ${+$('scH').value||0}-${+$('scA').value||0}`);
-$('tmGo').onclick=()=>$('tm').value&&send('/time '+$('tm').value);
+$('tmGo').onclick=()=>{const a=clockArg($('tm').value);a&&send('/time '+a)};
 let resetArm=0;$('reset').onclick=()=>{if(Date.now()-resetArm<3000){send('/reset');resetArm=0;$('reset').textContent='NEW MATCH (0-0, 00:00)'}else{resetArm=Date.now();$('reset').textContent='TAP AGAIN TO CONFIRM'}};
 
+
+/* ---------- clock & added time (main screen) ---------- */
+function clockArg(v){v=String(v||'').trim().replace(/[.,;' ]/g,':').replace(/[^\d:]/g,'');if(!v)return '';const [mm,ss]=v.split(':');
+  const m=parseInt(mm,10);if(isNaN(m)||m>150)return '';const s=Math.min(59,parseInt(ss||'0',10)||0);return m+':'+String(s).padStart(2,'0')}
+$('tmMainGo').onclick=()=>{const a=clockArg($('tmMain').value);if(!a)return toast('Type the TV time, e.g. 23:15 or 23');send('/time '+a);$('tmMain').value='';$('tmMain').blur()};
+$('tmMain').onkeydown=e=>{if(e.key==='Enter')$('tmMainGo').click()};
+let ckArm=0;$('clkReset').onclick=()=>{if(Date.now()-ckArm<3000){send('/clockreset');ckArm=0;$('clkReset').textContent='⟲ RESET CLOCK TO 00:00'}else{ckArm=Date.now();$('clkReset').textContent='TAP AGAIN TO RESET CLOCK';setTimeout(()=>{$('clkReset').textContent='⟲ RESET CLOCK TO 00:00'},3000)}};
+$('addGo').onclick=()=>{const n=parseInt($('addC').value,10);if(!(n>=1&&n<=30))return toast('Type added minutes, 1 to 30');send('/add '+n);$('addC').value='';$('addC').blur()};
+$('addC').onkeydown=e=>{if(e.key==='Enter')$('addGo').click()};
 $('tkGo').onclick=()=>{const l=$('tk').value.split('\n').map(x=>x.trim()).filter(Boolean);if(l.length)send('/ticker '+l.join(' | '))};
 
 /* ===== shared line-up pitch (used by overlay AND phone preview) ===== */
@@ -365,8 +384,8 @@ async function pull(){
   try{const r=await fetch('/state',{cache:'no-store'});const j=await r.json();
     const fresh=j.at&&(Date.now()-j.at<6000||Math.abs(Date.now()-j.at)<6000);
     $('dot').className='dot '+(j.home?'ok':'bad');$('dot').querySelector('span').textContent=j.home?'OBS connected':'OBS not open';
-    if(!j.home)return;st=j;stAt=Date.now();$('oldBanner').style.display=(String(j.ver||'')!=='6')?'block':'none';
-    $('bH').textContent=j.home;$('bA').textContent=j.away;$('sH').textContent=j.h;$('sA').textContent=j.a;$('bP').textContent=j.per;$('bAdd').textContent=j.add?'+'+j.add:'';
+    if(!j.home)return;st=j;stAt=Date.now();$('oldBanner').style.display=(String(j.ver||'')!=='7')?'block':'none';
+    $('bH').textContent=j.home;$('bA').textContent=j.away;$('sH').textContent=j.h;$('sA').textContent=j.a;$('bP').textContent=j.per;$('bAdd').textContent=j.add?'+'+j.add:'';document.querySelectorAll('button.add').forEach(b=>b.classList.toggle('on',(b.dataset.c.split(' ')[1]||'')===String(j.add||'')));
     $('gH').textContent='⚽ '+j.home+' GOAL';$('gA').textContent='⚽ '+j.away+' GOAL';$('cH').textContent=j.home+' XI';if(names.h!==j.home||names.a!==j.away){names.h=j.home;names.a=j.away;if(!touched)drawEditor();tPreview()}
     document.querySelectorAll('.per').forEach(b=>b.classList.toggle('on',b.dataset.c===j.per));
     document.querySelectorAll('.card').forEach(b=>b.classList.toggle('on',b.dataset.p===(j.pin||'')));

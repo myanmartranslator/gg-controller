@@ -352,6 +352,8 @@ function handle(text){
   else if(u.includes('SCOREBOARD')){S.bug=!S.bug;reply='Scoreboard '+(S.bug?'shown':'hidden')}
   else if(m=t.match(/^\/teams\s+(\S+)\s+(\S+)(?:\s+(\S+)\s+(\S+))?/i)){S.home=m[1].toUpperCase();S.away=m[2].toUpperCase();S.homeFull=(m[3]||m[1]).replace(/_/g,' ').toUpperCase();S.awayFull=(m[4]||m[2]).replace(/_/g,' ').toUpperCase();reply='Teams: '+S.home+' v '+S.away}
   else if(m=t.match(/^\/score\s+(\d+)\s*[-:]\s*(\d+)/i)){S.h=+m[1];S.a=+m[2];reply='Score '+S.h+'-'+S.a}
+  else if(m=t.match(/^\/nudge\s+(-?\d+)/i)){S.base=Math.max(0,secs()+(+m[1]));if(S.running)S.t0=Date.now();reply='Clock '+(+m[1]>0?'+':'−')+Math.abs(+m[1])+'s → '+mmss(S.base)}
+  else if(u==='/CLOCKRESET'){S.base=0;S.running=false;S.add='';reply='Clock reset to 00:00 – press START at kick-off'}
   else if(m=t.match(/^\/time\s+(\d+)(?::(\d+))?/i)){S.base=(+m[1])*60+(+(m[2]||0));if(S.running)S.t0=Date.now();reply='Clock set to '+mmss(S.base)}
   else if(m=t.match(/^\/add\s*(\d*)/i)){S.add=m[1]||'';reply=S.add?'Added time +'+S.add:'Added time removed'}
   else if(m=t.match(/^\/league\s+(.+)/i)){S.league=m[1].toUpperCase();reply='League set'}
@@ -385,7 +387,7 @@ window.handleCommand=handle;   // for testing
 function status(t,ok){const s=$('status');s.style.display=t?'block':'none';s.textContent=t;s.style.color=ok?'#7CFC9A':'#FF8A8A'}
 let lastReply='';
 function report(){if(!location.protocol.startsWith('http'))return;
-  const out={ver:'6',home:S.home,away:S.away,h:S.h,a:S.a,per:S.per,add:S.add,secs:secs(),running:S.running,pin:S.pin,bug:S.bug,
+  const out={ver:'7',home:S.home,away:S.away,h:S.h,a:S.a,per:S.per,add:S.add,secs:secs(),running:S.running,pin:S.pin,bug:S.bug,
     headline:S.headline,subs:S.subs,league:S.league,xiH:S.xiH,xiA:S.xiA,table:S.table,reply:lastReply,at:Date.now(),
     cta:(S.cta&&S.cta.length?S.cta:CONFIG.cta),ticker:(S.ticker||CONFIG.ticker),dateMode:S.dateMode,dateTxt:S.dateTxt,tz:S.tz||CONFIG.timezone,icons:S.icons,handle:S.handle,hasSocImg:!!S.socImg};
   fetch('/state',{method:'POST',body:JSON.stringify(out)}).catch(()=>{})}
