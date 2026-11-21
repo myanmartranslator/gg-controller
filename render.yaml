@@ -3,6 +3,7 @@ services:
     name: golden-goal-live
     runtime: python
     plan: free            # use "starter" to avoid sleeping after 15 min idle
+    region: singapore     # closest to Myanmar
     buildCommand: "echo no build step"
     startCommand: "python server.py"
     healthCheckPath: /healthz

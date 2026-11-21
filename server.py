@@ -82,15 +82,22 @@ class H(BaseHTTPRequestHandler):
             self.end_headers()
             with cond:
                 last = next_id - 1
+                try:
+                    lid = int(self.headers.get("Last-Event-ID", ""))
+                    if lid < last: last = lid          # resume: resend commands missed while reconnecting
+                except ValueError:
+                    pass
             try:
-                self.wfile.write(b": connected\n\n"); self.wfile.flush()
+                self.wfile.write(b"retry: 2000\n: connected\n\n"); self.wfile.flush()
                 while True:
                     with cond:
-                        cond.wait(timeout=15)
                         new = [c for c in commands if c[0] > last]
+                        if not new:
+                            cond.wait(timeout=15)
+                            new = [c for c in commands if c[0] > last]
                     if new:
                         for cid, text in new:
-                            self.wfile.write(("data: " + json.dumps({"id": cid, "cmd": text}) + "\n\n").encode())
+                            self.wfile.write(("id: %d\ndata: " % cid + json.dumps({"id": cid, "cmd": text}) + "\n\n").encode())
                             last = cid
                     else:
                         self.wfile.write(b": ping\n\n")
