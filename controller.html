@@ -87,7 +87,7 @@ details.sub summary{font-weight:700;cursor:pointer}
 <div class="clk">
   <div class="hint" style="margin:0 0 6px">Type the time you see on the TV broadcast, e.g. <b>23:15</b> or just <b>23</b>, then tap SET.</div>
   <div class="row"><input id="tmMain" inputmode="decimal" placeholder="23:15"><button class="gold" id="tmMainGo" style="flex:0 0 110px">SET</button></div>
-  <div class="g g4" style="margin-top:8px"><button class="sm" data-c="/nudge -60">−1 MIN</button><button class="sm" data-c="/nudge -10">−10 SEC</button><button class="sm" data-c="/nudge 10">+10 SEC</button><button class="sm" data-c="/nudge 60">+1 MIN</button></div>
+  <div class="g g4" style="margin-top:8px"><button class="sm" data-n="-60">−1 MIN</button><button class="sm" data-n="-10">−10 SEC</button><button class="sm" data-n="10">+10 SEC</button><button class="sm" data-n="60">+1 MIN</button></div>
   <div class="g g3" style="margin-top:8px"><button class="red" id="clkReset">⟲ 00:00</button><button class="gold" data-c="/time 45:00">45:00</button><button class="gold" data-c="/time 90:00">90:00</button></div>
   <div class="hint" style="margin:6px 0 0">⟲ 00:00 = reset (1st half, clock stopped, added time off – score stays). 45:00 / 90:00 jump the clock and keep it running if it was running.</div>
 </div>
@@ -113,7 +113,14 @@ details.sub summary{font-weight:700;cursor:pointer}
 </div></details>
 
 <details id="dXI" open><summary>LINE-UPS (BOTH TEAMS)</summary><div class="in">
-  <div class="hint">Live preview – this is exactly what OBS will show. Type over any name or number.</div>
+  <div class="easy">
+    <div class="lbl">1-TAP OFFICIAL LINE-UPS (BOTH TEAMS)</div>
+    <select id="xLg"><option value="eng.1">Premier League</option><option value="esp.1">LaLiga</option><option value="ita.1">Serie A</option><option value="ger.1">Bundesliga</option><option value="fra.1">Ligue 1</option><option value="eng.2">Championship</option><option value="uefa.champions">Champions League</option></select>
+    <button class="gold big" id="xLive" style="width:100%">⚡ LOAD LINE-UPS &amp; SHOW</button>
+    <div id="xPick" style="display:none;margin-top:8px"><select id="xMatch"></select><button class="gold" id="xPickGo" style="width:100%;margin-top:6px">LOAD THIS MATCH</button></div>
+    <div class="hint" id="xInfo">Official line-ups come out about 1 hour before kick-off. Until then your predicted XI stays on screen.</div>
+  </div>
+  <div class="hint">Live preview – this is exactly what OBS will show. Type over any name or number, then tap SAVE.</div>
   <div class="pv"><div class="pvin" id="pv"></div></div>
   <div class="team" id="teamH"></div>
   <div class="team" id="teamA"></div>
@@ -209,6 +216,59 @@ $('tmMain').onkeydown=e=>{if(e.key==='Enter')$('tmMainGo').click()};
 $('clkReset').onclick=()=>send('1ST');
 $('addGo').onclick=()=>{const n=parseInt($('addC').value,10);if(!(n>=1&&n<=30))return toast('Type added minutes, 1 to 30');send('/add '+n);$('addC').value='';$('addC').blur()};
 $('addC').onkeydown=e=>{if(e.key==='Enter')$('addGo').click()};
+
+/* minute/second buttons: work with ANY overlay version (send an exact /time) */
+function curSecs(){return st?Math.max(0,st.secs+(st.running?Math.floor((Date.now()-stAt)/1000):0)):0}
+let nPend=null,nTimer=0;
+document.querySelectorAll('[data-n]').forEach(b=>b.onclick=()=>{
+  if(!st)return toast('Not connected to OBS yet');
+  const d=+b.dataset.n,now=Date.now();
+  const base=nPend?nPend.t+(st.running?(now-nPend.at)/1000:0):curSecs();
+  nPend={t:Math.max(0,Math.round(base+d)),at:now};
+  $('bC').textContent=mmss(nPend.t);if(navigator.vibrate)navigator.vibrate(15);
+  clearTimeout(nTimer);nTimer=setTimeout(()=>{const t=Math.max(0,Math.round(nPend.t+(st&&st.running?(Date.now()-nPend.at)/1000:0)));
+    nPend=null;send('/time '+Math.floor(t/60)+':'+String(t%60).padStart(2,'0'))},400)});
+
+/* ---------- 1-tap official line-ups ---------- */
+const xNorm=s=>String(s||'').toUpperCase().normalize('NFD').replace(/[^A-Z]/g,'');
+function xAutoLeague(){const L=xNorm(st&&st.league);const v=L.includes('LALIGA')||L.includes('LIGA')?'esp.1':L.includes('SERIE')?'ita.1':L.includes('BUNDES')?'ger.1':L.includes('LIGUE')?'fra.1':L.includes('CHAMPIONSHIP')?'eng.2':L.includes('CHAMPIONS')?'uefa.champions':'eng.1';$('xLg').value=v}
+function xHit(t,code){if(!code)return false;const a=xNorm(t.abbr),n=xNorm(t.name),s=xNorm(t.short);
+  return a===code||n.startsWith(code)||s.startsWith(code)||(code.length>=4&&(n.includes(code)||code.includes(s)))}
+function xScore(m){const H=xNorm(st&&st.home),A=xNorm(st&&st.away),HL=xNorm(st&&st.headline);
+  if(xHit(m.home,H)&&xHit(m.away,A))return{s:10,swap:false};
+  if(xHit(m.home,A)&&xHit(m.away,H))return{s:9,swap:true};
+  const k=t=>xNorm(t.short||t.name).slice(0,5);
+  if(HL&&HL.includes(k(m.home))&&HL.includes(k(m.away)))return{s:5,swap:HL.indexOf(k(m.home))>HL.indexOf(k(m.away))};
+  return{s:0,swap:false}}
+function xFlip(xi){const rows=fRows(xi.f);let i=0;const p=[],n=[];rows.forEach(c=>{const ps=xi.p.slice(i,i+c),ns=xi.n.slice(i,i+c);if(c>1){ps.reverse();ns.reverse()}p.push(...ps);n.push(...ns);i+=c});return{f:xi.f,p,n}}
+const xTime=d=>{try{return new Date(d).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}catch(e){return ''}};
+let xMatches=[];
+async function xLoadEvent(m,swap){
+  $('xInfo').textContent='Loading '+m.home.short+' v '+m.away.short+' …';
+  const r=await fetch('/api/lineups?league='+$('xLg').value+'&event='+encodeURIComponent(m.id),{cache:'no-store'});const j=await r.json();
+  if(!j.ok)throw new Error(j.error||'no data');
+  if(!j.available){$('xInfo').textContent='⏳ Line-ups for '+m.home.short+' v '+m.away.short+' are not out yet (kick-off '+xTime(m.date)+'). Try again about 1 hour before kick-off. Your current XI stays on screen.';toast('Line-ups not out yet');return}
+  // server draws the event's away team for the TOP half; if our home/away are swapped, flip rows
+  const evH=j.home.xi,evA=j.away.xi;
+  X.home=swap?xFlip(evA):evH;X.away=swap?xFlip(evH):evA;touched=false;drawEditor();
+  send('/xiboth '+JSON.stringify({home:X.home,away:X.away}));
+  const hn=swap?j.away.name:j.home.name,an=swap?j.home.name:j.away.name;
+  $('xInfo').textContent='✅ Official line-ups on stream: '+hn+' '+X.home.f+' · '+an+' '+X.away.f+' (loaded '+xTime(Date.now())+'). You can still edit below.';
+  toast('✅ Official line-ups on stream')}
+$('xLive').onclick=async()=>{const b=$('xLive');b.disabled=true;b.textContent='LOADING…';$('xPick').style.display='none';
+  try{const r=await fetch('/api/matches?league='+$('xLg').value,{cache:'no-store'});const j=await r.json();if(!j.ok)throw new Error(j.error||'no data');
+    xMatches=j.matches||[];if(!xMatches.length){$('xInfo').textContent='No '+j.league+' matches found around today. Pick the right league above.';return}
+    const now=Date.now();let best=null;
+    xMatches.forEach(m=>{const sc=xScore(m);if(!sc.s)return;const d=Math.abs(new Date(m.date)-now);if(!best||sc.s>best.s||(sc.s===best.s&&d<best.d))best={m,s:sc.s,swap:sc.swap,d}});
+    if(best)await xLoadEvent(best.m,best.swap);
+    else{$('xMatch').innerHTML=xMatches.map((m,i)=>`<option value="${i}">${escH(m.home.short)} v ${escH(m.away.short)} – ${escH(m.status||xTime(m.date))}</option>`).join('');
+      $('xPick').style.display='block';$('xInfo').textContent='Could not find '+(st?st.home+' v '+st.away:'your match')+' automatically – choose it below.'}}
+  catch(e){$('xInfo').textContent='Download failed ('+e.message+'). Type the line-ups by hand below.';toast('Could not download line-ups')}
+  finally{b.disabled=false;b.textContent='⚡ LOAD LINE-UPS & SHOW'}};
+$('xPickGo').onclick=async()=>{const m=xMatches[+$('xMatch').value];if(!m)return;
+  const H=xNorm(st&&st.home);const swap=!!H&&xHit(m.away,H)&&!xHit(m.home,H);
+  try{await xLoadEvent(m,swap);$('xPick').style.display='none'}catch(e){$('xInfo').textContent='Download failed ('+e.message+').'}};
+$('dXI').addEventListener('toggle',()=>{if($('dXI').open&&st)xAutoLeague()});
 $('tkGo').onclick=()=>{const l=$('tk').value.split('\n').map(x=>x.trim()).filter(Boolean);if(l.length)send('/ticker '+l.join(' | '))};
 
 /* ===== shared line-up pitch (used by overlay AND phone preview) ===== */
@@ -385,7 +445,7 @@ async function pull(){
   try{const r=await fetch('/state',{cache:'no-store'});const j=await r.json();
     const fresh=j.at&&(Date.now()-j.at<6000||Math.abs(Date.now()-j.at)<6000);
     $('dot').className='dot '+(j.home?'ok':'bad');$('dot').querySelector('span').textContent=j.home?'OBS connected':'OBS not open';
-    if(!j.home)return;st=j;stAt=Date.now();$('oldBanner').style.display=(String(j.ver||'')!=='7')?'block':'none';
+    if(!j.home)return;const first=!st;st=j;stAt=Date.now();if(first&&typeof xAutoLeague==='function')xAutoLeague();$('oldBanner').style.display=(String(j.ver||'')!=='7')?'block':'none';
     $('bH').textContent=j.home;$('bA').textContent=j.away;$('sH').textContent=j.h;$('sA').textContent=j.a;$('bP').textContent=j.per;$('bAdd').textContent=j.add?'+'+j.add:'';document.querySelectorAll('button.add').forEach(b=>b.classList.toggle('on',(b.dataset.c.split(' ')[1]||'')===String(j.add||'')));
     $('gH').textContent='⚽ '+j.home+' GOAL';$('gA').textContent='⚽ '+j.away+' GOAL';$('cH').textContent=j.home+' XI';if(names.h!==j.home||names.a!==j.away){names.h=j.home;names.a=j.away;if(!touched)drawEditor();tPreview()}
     document.querySelectorAll('.per').forEach(b=>b.classList.toggle('on',b.dataset.c===j.per));
@@ -394,7 +454,7 @@ async function pull(){
     if(!filled){filled=true;$('hs').value=j.home;$('as').value=j.away;$('hl').value=j.headline;$('sb').value=j.subs;$('lg').value=j.league;
 }
   }catch(e){$('dot').className='dot bad';$('dot').querySelector('span').textContent='No server'}}
-setInterval(()=>{if(st){const t=st.secs+(st.running?Math.floor((Date.now()-stAt)/1000):0);$('bC').textContent=mmss(t)}},250);
+setInterval(()=>{if(st&&!nPend){const t=st.secs+(st.running?Math.floor((Date.now()-stAt)/1000):0);$('bC').textContent=mmss(t)}},250);
 function fitPv(){['pv','tpv'].forEach(id=>{const e=$(id);const w=e.parentElement.clientWidth;if(w)e.style.transform='scale('+(w/430)+')'})}
 addEventListener('resize',fitPv);
 let xiLoaded=false;setInterval(()=>{if(!xiLoaded&&st){xiLoaded=true;loadXI(true);tLoad(true)}fitPv()},500);

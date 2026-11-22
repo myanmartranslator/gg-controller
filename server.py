@@ -85,6 +85,141 @@ def live_table(lg):
     return out
 
 
+# ---------- official line-ups (ESPN scoreboard + match summary) ----------
+BOARD_URL = os.environ.get("GG_BOARD_URL", "https://site.api.espn.com/apis/site/v2/sports/soccer/{lg}/scoreboard?dates={d}")
+SUMMARY_URL = os.environ.get("GG_SUMMARY_URL", "https://site.api.espn.com/apis/site/v2/sports/soccer/{lg}/summary?event={ev}")
+_jcache = {}
+
+
+def get_json(url, ttl):
+    c = _jcache.get(url)
+    if c and time.time() - c[0] < ttl:
+        return c[1]
+    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0 GoldenGoal"})
+    with urllib.request.urlopen(req, timeout=12) as r:
+        data = json.loads(r.read().decode("utf-8"))
+    _jcache[url] = (time.time(), data)
+    return data
+
+
+def list_matches(lg):
+    if lg not in LEAGUES:
+        lg = "eng.1"
+    import datetime as _dt
+    today = _dt.datetime.now(_dt.timezone.utc).date()
+    out, seen = [], set()
+    for k in (-1, 0, 1, 2):
+        d = (today + _dt.timedelta(days=k)).strftime("%Y%m%d")
+        try:
+            data = get_json(BOARD_URL.format(lg=lg, d=d), 120)
+        except Exception:
+            continue
+        for ev in data.get("events") or []:
+            if ev.get("id") in seen:
+                continue
+            seen.add(ev.get("id"))
+            comp = ((ev.get("competitions") or [{}])[0].get("competitors")) or []
+            t = {}
+            for c in comp:
+                tm = c.get("team") or {}
+                t[c.get("homeAway")] = {"abbr": tm.get("abbreviation", ""), "name": tm.get("displayName", ""),
+                                        "short": SHORT.get(tm.get("displayName", ""), tm.get("shortDisplayName", ""))}
+            if "home" in t and "away" in t:
+                st = ((ev.get("status") or {}).get("type") or {}).get("shortDetail", "")
+                out.append({"id": ev.get("id"), "date": ev.get("date", ""), "status": st, "home": t["home"], "away": t["away"]})
+    out.sort(key=lambda m: m["date"])
+    return {"ok": True, "league": LEAGUES[lg], "matches": out}
+
+
+def _side_key(pos):
+    # 0 = left wide, 1 = left-centre, 2 = centre, 3 = right-centre, 4 = right wide (from the team's own view)
+    p = (pos or "").upper()
+    if p.endswith("-L"):
+        return 1
+    if p.endswith("-R"):
+        return 3
+    if p.startswith("L"):
+        return 0
+    if p.startswith("R"):
+        return 4
+    return 2
+
+
+def _line(pos):
+    p = (pos or "").upper()
+    if p in ("G", "GK"):
+        return 0
+    if p.startswith("CD") or p.startswith("CB") or p.endswith("B") or p in ("D", "SW") or "WB" in p:
+        return 1
+    if p.startswith("DM"):
+        return 2
+    if p.startswith("AM"):
+        return 4
+    if p.startswith("F") or p.startswith("CF") or p.startswith("ST") or p in ("S", "LW", "RW", "W", "LF", "RF"):
+        return 5
+    return 3      # CM, M, LM, RM ...
+
+
+def build_xi(roster, top_half):
+    starters = [r for r in roster if r.get("starter")]
+    if len(starters) < 11:
+        return None
+    starters = starters[:11]
+    lines = {}
+    lastnames = {}
+    for r in starters:
+        a = r.get("athlete") or {}
+        ln = (a.get("lastName") or "").strip() or (a.get("displayName") or "?").split()[-1]
+        lastnames[ln] = lastnames.get(ln, 0) + 1
+    for r in starters:
+        pos = ((r.get("position") or {}).get("abbreviation")) or ""
+        a = r.get("athlete") or {}
+        ln = (a.get("lastName") or "").strip() or (a.get("displayName") or "?").split()[-1]
+        if lastnames.get(ln, 0) > 1:
+            ln = a.get("shortName") or a.get("displayName") or ln
+        fp = r.get("formationPlace")
+        try:
+            fp = int(fp)
+        except Exception:
+            fp = 99
+        lines.setdefault(_line(pos), []).append((_side_key(pos), fp, ln, str(r.get("jersey") or "")))
+    if len(lines.get(0, [])) != 1:          # need exactly one keeper; otherwise trust order as-is
+        gk = lines.pop(0, [])
+        extra = gk[1:] if gk else []
+        lines.setdefault(3, []).extend(extra)
+        lines[0] = gk[:1] or [lines.setdefault(3, []).pop(0)]
+    # wide midfielders behind a No.10 belong in the same row (4-2-3-1: LM, AM, RM)
+    if lines.get(3) and lines.get(4) and all(x[0] in (0, 4) for x in lines[3]):
+        lines[4] = lines[4] + lines.pop(3)
+    # one holding mid + two central mids, nothing in front = a flat 3 (4-3-3)
+    if len(lines.get(2, [])) == 1 and len(lines.get(3, [])) == 2 and not lines.get(4):
+        lines[3] = lines[3] + lines.pop(2)
+    rows, p, n = [], [], []
+    for k in sorted(lines):
+        pl = sorted(lines[k], key=lambda x: (x[0], x[1]))
+        if top_half:                         # away team is drawn upside-down: their right is on screen left
+            pl = pl[::-1]
+        if k:
+            rows.append(str(len(pl)))
+        for x in pl:
+            p.append(x[2]); n.append(x[3])
+    return {"f": "-".join(rows), "p": p, "n": n}
+
+
+def lineups(lg, ev):
+    if lg not in LEAGUES:
+        lg = "eng.1"
+    data = get_json(SUMMARY_URL.format(lg=lg, ev=ev), 30)
+    out = {"ok": True, "available": False}
+    for ro in data.get("rosters") or []:
+        side = ro.get("homeAway")
+        tm = ro.get("team") or {}
+        xi = build_xi(ro.get("roster") or [], side == "away")
+        out[side] = {"abbr": tm.get("abbreviation", ""), "name": tm.get("displayName", ""), "xi": xi}
+    out["available"] = bool(out.get("home", {}).get("xi") and out.get("away", {}).get("xi"))
+    return out
+
+
 class H(BaseHTTPRequestHandler):
     protocol_version = "HTTP/1.1"
 
@@ -120,6 +255,14 @@ class H(BaseHTTPRequestHandler):
             return self.file("overlay.html")
         if path == "/state":
             return self.send(200, state["json"].encode(), "application/json")
+        if path in ("/api/matches", "/api/lineups"):
+            q = parse_qs(urlparse(self.path).query)
+            lg = (q.get("league") or ["eng.1"])[0]
+            try:
+                out = list_matches(lg) if path == "/api/matches" else lineups(lg, (q.get("event") or [""])[0])
+            except Exception as e:
+                out = {"ok": False, "error": str(e)[:200]}
+            return self.send(200, json.dumps(out).encode(), "application/json")
         if path == "/api/table":
             lg = (parse_qs(urlparse(self.path).query).get("league") or ["eng.1"])[0]
             try:
